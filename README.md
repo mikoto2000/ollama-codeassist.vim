@@ -1,71 +1,70 @@
 ﻿# ollama-codeassist.vim
 
-`ollama-codeassist.vim` は、Vim からローカル Ollama (`/api/generate`) に非同期リクエストを送り、コード補完候補を行うプラグインです。
+Vim からローカル Ollama (`/api/generate`) に非同期リクエストを送り、現在バッファの前後文脈を使ってコード補完候補を生成するプラグインです。
 
-## 現状
+## 現在の実装状態
 
-- メイン実装: `autoload/ollama-codeassist.vim`
-- Vital の `Web.AsyncHTTP` を使って POST リクエストを送信
-- 現在はサンプル `Context` を使い、ファイル読込時に `RequestInner(context)` を実行する構成
-- コマンド・マッピング・自動補完連携は未実装
+- メイン実装: `autoload/ollama_codeassist.vim`
+- Vital の `Web.AsyncHTTP` で POST リクエストを送信
+- エクスポート関数: `ollama_codeassist#Request()`
+- 現在カーソル位置を基準に prefix/suffix を作って FIM 形式で問い合わせ
+- 返ってきた `response` を現在行へ反映（行の置換/追記）
+
+注: ユーザーコマンド (`:OllamaCodeAssist`) や自動補完 (`completefunc`/`omnifunc`) 連携はまだ未実装です。
 
 ## 要件
 
-- Vim9 script が使える Vim または Neovim
-- Ollama がローカル起動していること
-  - 既定エンドポイント: `http://localhost:11434/api/generate`
+- Vim9 script が使える Vim
+- ローカルで Ollama が起動していること
+  - 既定 endpoint: `http://localhost:11434/api/generate`
 - 使用モデルがローカルに存在すること
-  - 既定: `qwen2.5:14b-instruct`
+  - 既定: `qwen2.5-coder:14b`
 
 ## インストール
 
-`pack` 管理の場合の例:
+`pack` 管理の例:
 
 ```vim
 " ~/.vimrc or init.vim
 packadd ollama-codeassist.vim
 ```
 
-または、このリポジトリを `runtimepath` に含めて読み込んでください。
+## 使い方
 
-## 実行の流れ
+最小例（手動実行）:
 
-現状は `autoload/ollama-codeassist.vim` が読み込まれると、以下を実行します。
+```vim
+" キーマップ例
+nnoremap <silent> <leader>oa :call ollama_codeassist#Request()<CR>
+inoremap <silent> <C-g> :call ollama_codeassist#Request()<CR>
+```
 
-1. サンプルバッファ内容と行番号からプロンプトを組み立てる
-2. Ollama `/api/generate` に JSON を POST する
-3. レスポンスの `response` を `echomsg` で表示する
+実行すると、現在バッファの内容とカーソル位置から context を作成して Ollama に送信し、返答をバッファへ反映します。
 
-結果は `:messages` で確認できます。
+## 設定
 
-## 設定を変える場所
+以下の `g:` 変数で接続先とモデルを変更できます。
 
-`autoload/ollama-codeassist.vim` の先頭付近を編集します。
-
-- `host` / `port` / `endpoint_path`
-- `data_template.model`
-- `prompt_template`
-
-## 制約
-
-- 現在の実装はデモ寄りで、実バッファ連携・挿入処理は入っていません
-- 文字コードが環境依存で崩れる場合があります
-- エラー処理は最小限です（HTTP ステータスを表示）
+```vim
+let g:ollama_codeassist_host = 'localhost'
+let g:ollama_codeassist_port = 11434
+let g:ollama_codeassist_path = '/api/generate'
+let g:ollama_codeassist_model = 'qwen2.5-coder:14b'
+```
 
 ## トラブルシュート
 
-- `status` が `200` 以外:
+- 応答が返らない:
   - Ollama が起動しているか確認
-  - `host` / `port` / `endpoint_path` を確認
+  - `host`/`port`/`path` を確認
 - モデルエラー:
-  - `data_template.model` のモデルが `ollama list` に存在するか確認
-- 何も表示されない:
+  - `ollama list` に `g:ollama_codeassist_model` が存在するか確認
+- Vim 側で変化がない:
   - `:messages` を確認
-  - 非同期通信に必要な外部コマンド (`curl` など) が利用可能か確認
+  - 非同期通信に必要な実行環境（`curl`/`python` など）が利用可能か確認
 
-## 今後の実装候補
+## 制約
 
-- ユーザーコマンド化（例: `:OllamaCodeAssist`）
-- カーソル位置と現在バッファを使った動的コンテキスト生成
-- 補完メニュー連携（`completefunc` / `omnifunc`）
-- 設定を `g:` 変数で外出し
+- バッファ反映ロジックはシンプルで、編集内容の安全性チェックは最小限です
+- エラーハンドリングは限定的です
+- 応答品質はモデル/プロンプトに依存します
