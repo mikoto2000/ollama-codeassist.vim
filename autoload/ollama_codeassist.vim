@@ -11,6 +11,20 @@ var endpoint_url = $"http://{host}:{port}{path}"
 
 const AsyncHTTP = vital#ollamacodeassist#import("Web.AsyncHTTP")
 
+class Context
+  var language: string
+  var cursorLine: number
+  var prefix: string
+  var suffix: string
+
+  def new(language: string, cursorLine: number, prefix: string, suffix: string)
+    this.language = language
+    this.cursorLine = cursorLine
+    this.prefix = prefix
+    this.suffix = suffix
+  enddef
+endclass
+
 const data_template = {
   "model": model,
   "prompt": null,
@@ -20,17 +34,16 @@ const data_template = {
     "stop": ["<|FIM_START|>", "<|FIM_STOP|>", "<|im_start|>", "<|im_end|>"],
   }
 }
-var data = copy(data_template)
-var line = 0
-var language = 'unknown'
+def UserCb(ctx: Context, response: any)
 
-def UserCb(response: any)
   if response.status == 200
     # コンテキストの行に、レスポンスの内容を挿入する
     var s = json_decode(response.content).response
 
-    # もし \n が文字として入ってくる場合も吸収（保険）
-    s = substitute(s, '\\n', "\n", 'g')
+    # \n を改行に変換するが、 \\n はそのまま残す（エスケープされた \n と区別す るため）
+    s = substitute(s, '\\\\n', "\%x01", 'g')
+    s = substitute(s, '\\n', "\%x00", 'g')
+    s = substitute(s, "\%x01", '\\n', 'g')
 
     # もし \u0000 が文字として入ってくる場合も吸収（保険）
     s = substitute(s, '\\u0000', "\%x00", 'g')
@@ -40,19 +53,20 @@ def UserCb(response: any)
 
     # 改行で行分割して挿入
     var lines = split(s, '\r\?\n', 1)
-    setline(line, lines[0])
-    append(line, lines[1 : -1])
+    setline(ctx.cursorLine, lines[0])
+    append(ctx.cursorLine, lines[1 : -1])
   else
-    #echomsg response.status
+    echomsg response
   endif
 enddef
 
 # 現在のバッファからコンテキストを作成する関数
-def CreateCurrentBufferContext()
+def CreateCurrentBufferContext(): Context
   # 現在の行番号を取得
-  line = line('.')
+  var line = line('.')
 
   # 現在のバッファから言語を推測
+  var language = ''
   if &filetype != ''
     language = &filetype
   endif
@@ -64,6 +78,7 @@ def CreateCurrentBufferContext()
   #var buffer_suffix = '<|FIM_STOP|>' .. join(getregion(getpos('.'), [0] + searchpos('\%$', 'n')), "\n")
 
   ## プレフィックス計算(現在の行より前の10行分を取得)
+  #var lnum = line('.')
   #var prefix_start_lnum = max([1, line - 10])
   #var prefix_end_lnum = max([1, line - 1])
   #var buffer_prefix = join(getline(prefix_start_lnum, prefix_end_lnum), "\n")
@@ -74,22 +89,27 @@ def CreateCurrentBufferContext()
   #var buffer_suffix = join(getline(suffix_start_lnum, suffix_end_lnum), "\n")
   #echomsg buffer_suffix
 
-  data.prompt = buffer_prefix
-  data.suffix = buffer_suffix
+  return Context.new(language, line, buffer_prefix, buffer_suffix)
 enddef
 
 # コンテキストを基に、コード補完のリクエストを送る関数
-def RequestInner()
+def RequestInner(ctx: Context)
+  var data = copy(data_template)
+  data.language = ctx.language
+  data.cursorLine = ctx.cursorLine
+  data.prompt = ctx.prefix
+  data.suffix = ctx.suffix
+
   AsyncHTTP.request({
         \ 'method': 'POST',
         \ 'url': endpoint_url,
         \ 'data': json_encode(data),
-        \ 'userCallback': function('UserCb'),
+        \ 'userCallback': function('UserCb', [ctx]),
         \ })
 enddef
 
 export def Request()
-  CreateCurrentBufferContext()
-  RequestInner()
+  const ctx = CreateCurrentBufferContext()
+  RequestInner(ctx)
 enddef
 
