@@ -1,16 +1,18 @@
 vim9script
 
+var host = get(g:, 'ollama_codeassist_host', 'localhost')
+var port = get(g:, 'ollama_codeassist_port', 11434)
+var path = get(g:, 'ollama_codeassist_path', '/api/generate')
+var model = get(g:, 'ollama_codeassist_model', 'qwen2.5-coder:14b')
+# qwen2.5:14b-instruct
+# codellama:13b
+
+var endpoint_url = $"http://{host}:{port}{path}"
+
 const AsyncHTTP = vital#ollamacodeassist#import("Web.AsyncHTTP")
 
-var host = "localhost"
-var port = 11434
-var endpoint_path = "/api/generate"
-var endpoint_url = $"http://{host}:{port}{endpoint_path}"
-
 const data_template = {
-  "model": "qwen2.5-coder:14b",
-#  "model": "qwen2.5:14b-instruct",
-#  "model": "codellama:13b",
+  "model": model,
   "prompt": null,
   "suffix": null,
   "stream": false,
@@ -21,7 +23,6 @@ const data_template = {
 var data = copy(data_template)
 var line = 0
 var language = 'unknown'
-
 
 def UserCb(response: any)
   if response.status == 200
@@ -71,7 +72,7 @@ def CreateCurrentBufferContext()
   #var suffix_start_lnum = min([line('$'), lnum + 1])
   #var suffix_end_lnum = min([line('$'), lnum + 10])
   #var buffer_suffix = join(getline(suffix_start_lnum, suffix_end_lnum), "\n")
-  echomsg buffer_suffix
+  #echomsg buffer_suffix
 
   data.prompt = buffer_prefix
   data.suffix = buffer_suffix
