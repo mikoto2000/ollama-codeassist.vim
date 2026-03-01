@@ -9,13 +9,18 @@ var endpoint_url = $"http://{host}:{port}{endpoint_path}"
 
 const data_template = {
   "model": "qwen2.5:14b-instruct",
+#  "model": "codellama:13b",
   "prompt": null,
   "stream": false,
 }
 
 const prompt_template =<< trim END
-次の ${language} プログラムの ${line} 行目に不足しているコードを教えてください。
-もっとも可能性の高いコードを、コードのみ出力してください。コードブロックも出力しないでください。
+次の ${language} プログラムの ${line} 行目のコードが不足しています。
+${line} 行目のコードを、前後のコードを参考にして補完してください。
+補完するのは ${line} 行目のコードのみとしてください。
+もっとも可能性の高いコードを、コードのみ出力してください。
+説明文は出力しないでください。
+コードブロックも出力しないでください。
 
 
 ```${language}
@@ -50,7 +55,8 @@ def UserCb(response: any)
 
     # 改行で行分割して挿入
     var lines = split(s, '\r\?\n', 1)
-    append(context.line, lines)
+    setline(context.line, lines[0])
+    append(context.line, lines[1 : -1])
   else
     #echomsg response.status
   endif
