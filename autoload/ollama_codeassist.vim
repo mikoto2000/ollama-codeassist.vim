@@ -15,7 +15,7 @@ const data_template = {
 
 const prompt_template =<< trim END
 次の ${language} プログラムの ${line} 行目に不足しているコードを教えてください。
-もっとも可能性の高いコードを、コードのみ出力してください。コードブロックも不要です。
+もっとも可能性の高いコードを、コードのみ出力してください。コードブロックも出力しないでください。
 
 
 ```${language}
@@ -35,27 +35,50 @@ class Context
   enddef
 endclass
 
-var dummy_buffer =<< END
-// 標準出力に「ハローハローボー」と出力する
-public class HelloWorld {
-    public static void main(String[] args) {
-
-    }
-}
-END
+var context: Context
 
 def UserCb(response: any)
   if response.status == 200
-    echomsg json_decode(response.content).response
+    # コンテキストの行に、レスポンスの内容を挿入する
+    var s = json_decode(response.content).response
+
+    # もし \u0000 が文字として入ってくる場合も吸収（保険）
+    s = substitute(s, '\\u0000', "\%x00", 'g')
+
+    # NUL を改行に変換
+    s = substitute(s, "\%x00", "\n", 'g')
+
+    # 改行で行分割して挿入
+    var lines = split(s, '\r\?\n', 1)
+    append(context.line, lines)
   else
-    echomsg response.status
+    #echomsg response.status
   endif
 enddef
 
-var context = Context.new('java', 3, join(dummy_buffer, '\n'))
+# 現在のバッファからコンテキストを作成する関数
+def CreateCurrentBufferContext(): Context
+  var language = 'unknown'
+  var line = 0
+  var buffer = ''
 
+  # 現在のバッファから言語を推測
+  if &filetype != ''
+    language = &filetype
+  endif
+
+  # 現在の行番号を取得
+  line = line('.')
+
+  # バッファ全体の内容を取得
+  buffer = join(getline(1, '$'), '\n')
+
+  return Context.new(language, line, buffer)
+enddef
+
+# コンテキストを基に、コード補完のリクエストを送る関数
 def RequestInner(ctx: Context)
-  echomsg join(prompt_template, "\n")
+  #echomsg join(prompt_template, "\n")
 
   var prompt = substitute(join(prompt_template, "\n"), '${language}', ctx.language, 'g')
   prompt = substitute(prompt, '${line}', ctx.line, 'g')
@@ -64,8 +87,8 @@ def RequestInner(ctx: Context)
   var data = copy(data_template)
   data.prompt = prompt
 
-  echomsg endpoint_url
-  echomsg json_encode(data)
+  #echomsg endpoint_url
+  #echomsg json_encode(data)
 
   AsyncHTTP.request({
         \ 'method': 'POST',
@@ -75,4 +98,8 @@ def RequestInner(ctx: Context)
         \ })
 enddef
 
-RequestInner(context)
+export def Request()
+  context = CreateCurrentBufferContext()
+  RequestInner(context)
+enddef
+
