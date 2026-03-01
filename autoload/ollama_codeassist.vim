@@ -59,6 +59,8 @@ def CreateCurrentBufferContext()
   # バッファ全体の内容を取得
   var buffer_prefix = $"// language: {language}\n" .. $"// Please only codes, and not output codeblock text.\n// Don't add closing brackets if they already exist in suffix.\n" .. join(getline(1, '.'), '\n')
   var buffer_suffix = '<|FIM_STOP|>' .. join(getline('.', '$'), '\n')
+  #var buffer_prefix = $"// language: {language}\n" .. $"// Please only codes, and not output codeblock text.\n// Don't add closing brackets if they already exist in suffix.\n" .. join(getregion(getpos('.'), [0, line('$'), col([line('$'), '$']), 0]), "\n")
+  #var buffer_suffix = '<|FIM_STOP|>' .. join(getregion(getpos('.'), [0] + searchpos('\%$', 'n')), "\n")
 
   ## プレフィックス計算(現在の行より前の10行分を取得)
   #var prefix_start_lnum = max([1, line - 10])
